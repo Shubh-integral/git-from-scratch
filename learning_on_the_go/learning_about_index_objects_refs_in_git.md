@@ -42,7 +42,7 @@ It eventually stores three important types of objects:
 - Tree: Information about files and directories in a snapshot.
 - Commit: Information about a commit, including which tree represents the snapshot.
 
-For now, just remember: `objects/` is where Git stores the data it needs to preserve project history.
+For now, just remember: `objects/` is where Git stores the data it needs to preserve project history. **One thing to note here** -> git does lossless compression to your file and then stores it. 
 
 ## 3. Then what is `index`?
 
