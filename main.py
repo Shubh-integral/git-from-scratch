@@ -2,6 +2,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+import hashlib, zlib
 
 
 class GitObjects:
@@ -10,21 +11,37 @@ class GitObjects:
         self.object_type = object_type
         self.content = content
 
+    # SHA-1(header + content) → object ID : That ID is a fingerprint used to identify and retrieve the object. The same object bytes produce the same hash
+
     def hash(self):
-        # SHA-1 Hash? header = <type><size>\0<content> and then u hash this header. why is this called header? 
+        # SHA-1 Hash? header = <type><size in bytes>\0<content> and then u hash this header. A header is information placed before the actual content to describe it
         # why this format: <type><size>\0<content> ? type: to tell diff btw commit, blob or tree | size: to tell how mnany bytes (might be useful to check if file content size matches this -> gives a signal that nothing has been tampered with? content is well content xD )
-        pass
+
+        header = f"{self.object_type} {len(self.content)}\0".encode()
+        return hashlib.sha1(header + self.content).hexdigest() 
     
     def compress(self):
-        # use zlib on the header
-        pass
+        # use zlib on the header -> compressing the object for optimal storing
+        header = f"{self.object_type} {len(self.content)}\0".encode()
+        return zlib.compress(header + self.content)
 
-    def de_compress(self):
-        # classmethod? returns data in bytes...? 
-        pass
+    @classmethod
+    def de_compress(cls, data):
+        # here we will de-compress the ibject we compressed in the above function ^
+        decompressed = zlib.decompress(data)
+        null_idx = decompressed.find(b"\0")
+        header = decompressed[:null_idx]
+        content = decompressed[null_idx+1:]
+        object_type, size = header.split(" ")
+        return cls(object_type, content)
 
+class Blob(GitObjects):
+    def __init__(self, content):
+        super().__init__('blob', content)
 
-    pass 
+    def get_content(self):
+        return self.content
+
 
 
 class Repository:
@@ -67,9 +84,12 @@ class Repository:
             raise FileNotFoundError(f'Path {path} does not exist')
 
         content = full_path.read_bytes()
+        blob = Blob(content)
+        
 
         pass
     
+    # checking if those paths exist or not - if does, add it in staging area.
     def add_path(self, path):
         full_path = self.path / path
 
