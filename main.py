@@ -12,7 +12,6 @@ class GitObjects:
         self.content = content
 
     # SHA-1(header + content) → object ID : That ID is a fingerprint used to identify and retrieve the object. The same object bytes produce the same hash
-
     def hash(self):
         # SHA-1 Hash? header = <type><size in bytes>\0<content> and then u hash this header. A header is information placed before the actual content to describe it
         # why this format: <type><size>\0<content> ? type: to tell diff btw commit, blob or tree | size: to tell how mnany bytes (might be useful to check if file content size matches this -> gives a signal that nothing has been tampered with? content is well content xD )
@@ -42,8 +41,6 @@ class Blob(GitObjects):
     def get_content(self):
         return self.content
 
-
-
 class Repository:
     def __init__(self, path='.'):
         self.path = Path(path).resolve()
@@ -53,6 +50,7 @@ class Repository:
         self.objects_directory = self.git_directory / "objects"
         self.index_file = self.git_directory / "index"
         self.head_file = self.git_directory / "HEAD"
+        self.added_count = 0
 
     def init(self):
         # creating all the suitable files that are created when we initialize the git repository.
@@ -71,12 +69,31 @@ class Repository:
     
         return True
 
+    def store_object(self, obj):
+        object_hash = obj.hash()
+        object_dir = self.objects_directory / object_hash[:2]
+        object_file = object_dir / object_hash[2:]
+
+        if not object_file.exists():
+            if not object_dir.exists():
+                object_dir.mkdir()
+            object_file.write_bytes(obj.compress())
+        return object_hash
+
+    def load_index(self):
+        if not self.index_file.exists():
+            return {}
+        return json.loads(self.index_file.read_text())
+
+    def save_index(self, index):
+        self.index_file.write_text(json.dumps(index, indent=2))
+
     def add_file(self, path):
         # read the file content
         # create a Blob object from the file content 
         # we will compress the blob object created from the file content - A Git blob is a snapshot of one file's contents, identified by a hash.
         # we will store the compressed blob in the objects db/Folder in our case that we create while initializing ouyr git repo (.mygit/objects)
-        # update the index to include this file
+        # update the current state of the index to include this file
 
         full_path = self.path / path
 
@@ -85,10 +102,20 @@ class Repository:
 
         content = full_path.read_bytes()
         blob = Blob(content)
-        
+        blob_hash = self.store_object(blob)
+        index = self.load_index()
+        index[str(path)] = blob_hash
+        self.save_index(index)
+        self.added_count += 1
 
-        pass
-    
+    def add_directory(self, path):
+        full_path = self.path / path
+
+        for file_path in full_path.iterdir():
+            if file_path.name == ".mygit":
+                continue
+            self.add_path(file_path.relative_to(self.path))
+
     # checking if those paths exist or not - if does, add it in staging area.
     def add_path(self, path):
         full_path = self.path / path
@@ -130,18 +157,15 @@ def main():
         if not repo.init():
             print(f"Repository already exists in {repo.git_directory}", file=sys.stderr)
             sys.exit(1)
-        else:
-            repo.init()
     
     elif args.command == "add":
         if not repo.git_directory.exists():
             print(f"Not a Git Repository | Please initialize the Repository first using 'git init' command", file=sys.stderr)
             sys.exit(1)
 
-        print(args.path)
         for path in args.path:
-            # gotta check if those paths exists or not?
-            pass
+            repo.add_path(path)
+        print(f"Added {repo.added_count} files")
 
              
 
