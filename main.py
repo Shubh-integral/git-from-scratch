@@ -41,6 +41,13 @@ class Blob(GitObjects):
     def get_content(self):
         return self.content
 
+class tree(GitObjects):
+    def __init__(self, content):
+        super().__init__("tree", content)
+
+    def get_content(self):
+            return self.content
+    
 class Repository:
     def __init__(self, path='.'):
         self.path = Path(path).resolve()
@@ -130,6 +137,40 @@ class Repository:
         else:
             raise ValueError(f'{path} is neither a file nor a directory')
 
+    def group_paths(self, entries):
+        root_files = {}
+        folders = {}
+
+        for filename, blob_hash in sorted(entries.items()):
+            name, separator, remaining_path = filename.partition("/")
+
+            if not separator:
+                root_files[name] = blob_hash
+            else:
+                if name not in folders:
+                    folders[name] = {}
+
+                folders[name][remaining_path] = blob_hash
+
+        return root_files, folders
+
+    def commit(self, message):
+        # create a tree object from the index (staging area)
+        index = self.load_index()
+        root_files, folders = self.group_paths(index)
+        for folder_name, folder_entries in folders.items():
+            child_files, child_folders = self.group_paths(folder_entries)
+
+            folders[folder_name] = {
+                "files": child_files,
+                "folders": child_folders
+            }
+
+        print('rott files are ', root_files)
+        print('folder', folders)
+        
+        return root_files, folders
+
 
 
 def main():
@@ -142,7 +183,7 @@ def main():
     add_parser.add_argument("path", nargs='+', help="Files and Directories to be added    ") # nargs=+ is basically u can add multiple arguments and they will all be parsed into the list[]
 
     commit_parser = subparsers.add_parser("commit", help='commit the code into the repository')
-    commit_parser.add_argument("-m", help="Commit message")
+    commit_parser.add_argument("-m", help="Commit message", required=True)
    
     args = parser.parse_args()
     
@@ -167,11 +208,20 @@ def main():
             repo.add_path(path)
         print(f"Added {repo.added_count} files")
 
+    elif args.command == "commit":
+        if not repo.git_directory.exists():
+                print(f"Not a Git Repository | Please initialize the Repository first using 'git init' command", file=sys.stderr)
+                sys.exit(1)
+
+        repo.commit(args.m) 
+
+
              
 
 
     
-main()
+if __name__ == "__main__":
+    main()
 
 
 
